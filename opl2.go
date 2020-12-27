@@ -39,8 +39,11 @@ import "math"
 */
 
 const (
-	cWaveHandler = iota
+	//Use 8 handlers based on a small logatirmic wavetabe and an exponential table for volume
+	cWaveHandler = (10 + iota)
+	//Use a logarithmic wavetable with an exponential table for volume
 	cWaveTableLog
+	//Use a linear wavetable with a multiply table for volume
 	cWaveTableMul
 )
 
@@ -56,6 +59,7 @@ const (
 	//cWavePrecision = 1
 	cWavePrecision = 0
 
+	//Select the type of wave generator routine
 	cDBOPLWave = cWaveTableMul
 
 	//cWavePrecision = 1:

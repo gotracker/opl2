@@ -100,6 +100,7 @@ const (
 )
 
 // SetChanData sets the channel data for the channel
+//Forward the channel data to the operators of the channel
 func (c *Channel) SetChanData(chip *Chip, data uint32) {
 	change := c.chanData ^ data
 	c.chanData = data
@@ -119,6 +120,7 @@ func (c *Channel) SetChanData(chip *Chip, data uint32) {
 }
 
 // UpdateFrequency updates the frequency setting
+//Change in the chandata, check for new values and if we have to forward to operators
 func (c *Channel) UpdateFrequency(chip *Chip, fourOp uint8) {
 	//Extrace the frequency bits
 	data := c.chanData & 0xffff
@@ -271,6 +273,7 @@ func (c *Channel) ResetC0(chip *Chip) {
 }
 
 // GeneratePercussion generates percussion data in the channel
+//call this for the first channel
 func (c *Channel) GeneratePercussion(chip *Chip, output []int32, opl3Mode bool) {
 	//BassDrum
 	mod := int((c.old[0] + c.old[1]) >> c.feedback)
