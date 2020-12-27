@@ -321,11 +321,13 @@ func (c *Channel) GeneratePercussion(chip *Chip, output []int32, opl3Mode bool) 
 		sample += int32(c.Op(chip, 5).GetWave(uint(tcIndex), tcVol))
 	}
 	sample <<= 1
-	if opl3Mode {
-		output[0] += sample
-		output[1] += sample
-	} else {
-		output[0] += sample
+	if output != nil {
+		if opl3Mode {
+			output[0] += sample
+			output[1] += sample
+		} else {
+			output[0] += sample
+		}
 	}
 }
 
@@ -383,10 +385,18 @@ func (c *Channel) BlockTemplate(chip *Chip, samples uint32, output []int32, mode
 	for i := uint(0); i < uint(samples); i++ {
 		//Early out for percussion handlers
 		if mode == sm2Percussion {
-			c.GeneratePercussion(chip, output[i:], false)
+			var o []int32
+			if output != nil {
+				o = output[i:]
+			}
+			c.GeneratePercussion(chip, o, false)
 			continue //Prevent some unitialized value bitching
 		} else if mode == sm3Percussion {
-			c.GeneratePercussion(chip, output[i*2:], true)
+			var o []int32
+			if output != nil {
+				o = output[i*2:]
+			}
+			c.GeneratePercussion(chip, o, true)
 			continue //Prevent some unitialized value bitching
 		}
 
@@ -419,12 +429,14 @@ func (c *Channel) BlockTemplate(chip *Chip, samples uint32, output []int32, mode
 			sample += int32(c.Op(chip, 2).GetSample(next))
 			sample += int32(c.Op(chip, 3).GetSample(0))
 		}
-		switch mode {
-		case sm2AM, sm2FM:
-			output[i] += sample
-		case sm3AM, sm3FM, sm3FMFM, sm3AMFM, sm3FMAM, sm3AMAM:
-			output[i*2+0] += sample & int32(c.maskLeft)
-			output[i*2+1] += sample & int32(c.maskRight)
+		if output != nil {
+			switch mode {
+			case sm2AM, sm2FM:
+				output[i] += sample
+			case sm3AM, sm3FM, sm3FMFM, sm3AMFM, sm3FMAM, sm3AMAM:
+				output[i*2+0] += sample & int32(c.maskLeft)
+				output[i*2+1] += sample & int32(c.maskRight)
+			}
 		}
 	}
 	switch mode {

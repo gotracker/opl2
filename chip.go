@@ -1,5 +1,7 @@
 package opl2
 
+import "time"
+
 // This file is a Pure Go conversion of dbopl.h/.cpp
 
 /*
@@ -73,6 +75,17 @@ type Chip struct {
 	opl3Active int8
 
 	isOPL3 int
+
+	status uint8
+	reg02  uint8
+	reg03  uint8
+	timer1 uint8
+	timer2 uint8
+
+	timer1Per uint8
+	timer1Rem uint8
+	timer2Per uint8
+	timer2Rem uint8
 }
 
 // NewChip creates a new Chip object
@@ -188,6 +201,49 @@ func (c *Chip) ForwardLFO(samples uint32) uint32 {
 			c.tremoloIndex = 0
 		}
 	}
+
+	// update timers, if applicable
+	if (c.reg04 & 0x01) != 0 {
+		// timer 1
+		m := count / uint32(c.timer1Per)
+		d := uint8(count % uint32(c.timer1Per))
+		if d >= c.timer1Rem {
+			m++
+			c.timer1Rem = c.timer1Per - d
+		} else {
+			c.timer1Rem -= d
+		}
+
+		if m > 0 {
+			acc := uint32(c.timer1) + m
+			c.timer1 = uint8(acc)
+			c.status |= 0x80 | 0x40 // does this belong here?
+			if acc > 255 && (c.reg04&0x40) == 0 {
+				c.timer1 = c.reg02
+			}
+		}
+	}
+	if (c.reg04 & 0x02) != 0 {
+		// timer 2
+		m := count / uint32(c.timer2Per)
+		d := uint8(count % uint32(c.timer2Per))
+		if d >= c.timer2Rem {
+			m++
+			c.timer2Rem = c.timer2Per - d
+		} else {
+			c.timer2Rem -= d
+		}
+
+		if m > 0 {
+			acc := uint32(c.timer2) + m
+			c.timer2 = uint8(acc)
+			c.status |= 0x80 | 0x20 // does this belong here?
+			if acc > 255 && (c.reg04&0x20) == 0 {
+				c.timer2 = c.reg03
+			}
+		}
+	}
+
 	return count
 }
 
@@ -263,6 +319,11 @@ func (c *Chip) WriteBD(val uint8) {
 	}
 }
 
+// ReadStatus returns the value of the status register
+func (c *Chip) ReadStatus() uint8 {
+	return c.status
+}
+
 // WriteReg writes to register `reg` with value `val`
 func (c *Chip) WriteReg(reg uint32, val uint8) {
 	switch (reg & 0xf0) >> 4 {
@@ -272,6 +333,19 @@ func (c *Chip) WriteReg(reg uint32, val uint8) {
 				c.waveFormMask = 0x7
 			} else {
 				c.waveFormMask = 0x0
+			}
+		} else if reg == 0x02 {
+			//simulate timer updates
+			c.reg02 = val
+		} else if reg == 0x03 {
+			//simulate timer updates
+			c.reg03 = val
+		} else if reg == 0x04 {
+			//simulate timer updates
+			if (val & 0x80) != 0x00 {
+				c.status &^= 0x80 | 0x40 | 0x20
+			} else {
+				c.reg04 = val
 			}
 		} else if reg == 0x104 {
 			//Only detect changes in lowest 6 bits
@@ -377,7 +451,11 @@ func (c *Chip) GenerateBlock2(total uint, output []int32) {
 		for i := 0; i < 9; {
 			ch := &c.ch[i]
 			count++
-			ofs, valid := ch.BlockTemplate(c, samples, output[outputIdx:], ch.synthHandler)
+			var o []int32
+			if output != nil {
+				o = output[outputIdx:]
+			}
+			ofs, valid := ch.BlockTemplate(c, samples, o, ch.synthHandler)
 			if !valid {
 				panic("invalid offset returned from BlockTemplate")
 			}
@@ -397,7 +475,11 @@ func (c *Chip) GenerateBlock3(total uint, output []int32) {
 		for i := 0; i < 18; {
 			ch := &c.ch[i]
 			count++
-			ofs, valid := ch.BlockTemplate(c, samples, output[outputIdx:], ch.synthHandler)
+			var o []int32
+			if output != nil {
+				o = output[outputIdx:]
+			}
+			ofs, valid := ch.BlockTemplate(c, samples, o, ch.synthHandler)
 			if !valid {
 				panic("invalid offset returned from BlockTemplate")
 			}
@@ -415,6 +497,10 @@ func (c *Chip) Setup(rate uint32, chipIsOPL3 int) {
 
 	c.isOPL3 = chipIsOPL3
 
+	if chipIsOPL3 == 0 {
+		c.status = 0x06 // randomish data that some systems use to detect OPL2 vs OPL3
+	}
+
 	//Noise counter is run at the same precision as general waves
 	c.noiseAdd = uint32(0.5 + scale*float64(uint32(1)<<cLFOSh))
 	c.noiseCounter = 0
@@ -425,6 +511,10 @@ func (c *Chip) Setup(rate uint32, chipIsOPL3 int) {
 	c.lfoCounter = 0
 	c.vibratoIndex = 0
 	c.tremoloIndex = 0
+	c.timer1Per = uint8(0.5 + (time.Microsecond*80).Seconds()*float64(rate))
+	c.timer1Rem = c.timer1Per
+	c.timer2Per = uint8(0.5 + (time.Microsecond*320).Seconds()*float64(rate))
+	c.timer2Rem = c.timer2Per
 
 	//With higher octave this gets shifted up
 	//-1 since the freqCreateTable = *2
